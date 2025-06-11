@@ -127,6 +127,14 @@ export const createBatch = async (req, res) => {
 
     const savedBatch = await newBatch.save();
 
+    // Update the batch field for each intern
+    if (interns && interns.length > 0) {
+      await User.updateMany(
+        { _id: { $in: interns } },
+        { $set: { batch: savedBatch._id } }
+      );
+    }
+
     return res.status(201).json({
       message: "Batch created successfully",
       data: savedBatch,
@@ -169,6 +177,51 @@ export const getBatchesWithCounts = async (req, res) => {
   }
 };
 
+export const getBatchProgress = async (req, res) => {
+  try {
+    const batches = await Batch.find()
+      .populate('tasks.taskId', 'title description')
+      .populate('tasks.assignedTo', 'name email');
+
+    const progressData = batches.map((batch) => {
+      const progress = batch.allTasks > 0 ? (batch.completedTasks / batch.allTasks) * 100 : 0;
+      
+      // Get task statistics
+      const taskStats = batch.tasks.reduce((acc, task) => {
+        acc[task.status] = (acc[task.status] || 0) + 1;
+        return acc;
+      }, { pending: 0, completed: 0 });
+
+      return {
+        _id: batch._id,
+        name: batch.name,
+        startDate: batch.startDate,
+        EndDate: batch.EndDate,
+        allTasks: batch.allTasks,
+        completedTasks: batch.completedTasks,
+        progress: parseFloat(progress.toFixed(2)),
+        taskStats,
+        tasks: batch.tasks.map(task => ({
+          taskId: task.taskId,
+          title: task.taskId?.title,
+          description: task.taskId?.description,
+          status: task.status,
+          assignedTo: {
+            _id: task.assignedTo?._id,
+            name: task.assignedTo?.name,
+            email: task.assignedTo?.email
+          }
+        }))
+      };
+    });
+
+    res.status(200).json(progressData);
+  } catch (error) {
+    console.error("Error fetching batch progress:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
 export const deleteBatch = async (req, res) => {
   try {
     const { id } = req.params;
@@ -188,6 +241,43 @@ export const deleteBatch = async (req, res) => {
     return res.status(500).json({
       error: "Internal Server Error",
       details: error.message,
+    });
+  }
+};
+
+// Add user to batch
+export const updateBatchWithUser = async (req, res) => {
+  try {
+    const { batchId } = req.params;
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "User ID is required." });
+    }
+
+    const batch = await Batch.findById(batchId);
+    if (!batch) {
+      return res.status(404).json({ error: "Batch not found." });
+    }
+
+    // Check if user is already in the batch
+    if (batch.interns.includes(userId)) {
+      return res.status(400).json({ error: "User is already in this batch." });
+    }
+
+    // Add user to batch's interns array
+    batch.interns.push(userId);
+    await batch.save();
+
+    return res.status(200).json({
+      message: "User added to batch successfully",
+      data: batch
+    });
+  } catch (error) {
+    console.error("Error adding user to batch:", error);
+    return res.status(500).json({
+      error: "Internal Server Error",
+      details: error.message
     });
   }
 };

@@ -7,6 +7,7 @@ import {
   createBatch,
   getBatchesWithCounts,
   deleteBatch,
+  getBatchProgress,
 } from "../Controllers/admincontroller.js";
 
 const router = express.Router();
@@ -28,5 +29,8 @@ router.get("/batches/summary", getBatchesWithCounts);
 
 // Route for deleting a batch
 router.delete("/batches/:id", deleteBatch);
+
+// Route to get batch progress
+router.get("/batches/progress", getBatchProgress);
 
 export default router;
